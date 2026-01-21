@@ -1,0 +1,1245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocClassify-Zero | Zero-Shot Document Classification</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --classify-blue: #3b82f6;
+            --classify-indigo: #6366f1;
+            --classify-purple: #8b5cf6;
+            --classify-pink: #ec4899;
+            --classify-teal: #14b8a6;
+            --classify-green: #22c55e;
+            --classify-orange: #f97316;
+            --classify-red: #ef4444;
+            --bg-dark: #0c0a1d;
+            --bg-card: #13111f;
+            --bg-hover: #1e1b2e;
+            --bg-input: #0f0d1a;
+            --text-white: #f1f5f9;
+            --text-gray: #a1a1aa;
+            --text-dim: #71717a;
+            --border: rgba(139, 92, 246, 0.15);
+            --gradient-classify: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-white);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .grid-bg {
+            position: fixed;
+            inset: 0;
+            background-image: 
+                linear-gradient(rgba(139, 92, 246, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(139, 92, 246, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+        }
+
+        .glow-orbs {
+            position: fixed;
+            inset: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(120px);
+            animation: float 25s ease-in-out infinite;
+        }
+
+        .orb-1 { width: 500px; height: 500px; background: rgba(99, 102, 241, 0.12); top: -10%; left: 20%; }
+        .orb-2 { width: 400px; height: 400px; background: rgba(139, 92, 246, 0.1); bottom: 5%; right: 10%; animation-delay: -12s; }
+        .orb-3 { width: 300px; height: 300px; background: rgba(236, 72, 153, 0.08); top: 50%; left: -5%; animation-delay: -6s; }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(40px, -40px) scale(1.05); }
+        }
+
+        /* Header */
+        .header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(12, 10, 29, 0.9);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            padding: 0.75rem 2rem;
+        }
+
+        .header-inner {
+            max-width: 1700px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .logo-icon {
+            width: 50px;
+            height: 50px;
+            background: var(--gradient-classify);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            position: relative;
+        }
+
+        .logo-icon::after {
+            content: '';
+            position: absolute;
+            inset: -3px;
+            background: var(--gradient-classify);
+            border-radius: 16px;
+            z-index: -1;
+            opacity: 0.4;
+            filter: blur(12px);
+        }
+
+        .logo-text h1 {
+            font-size: 1.5rem;
+            font-weight: 800;
+            background: var(--gradient-classify);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo-text p {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .header-stats {
+            display: flex;
+            gap: 2.5rem;
+        }
+
+        .header-stat-value {
+            font-size: 1.2rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--classify-purple);
+        }
+
+        .header-stat-label {
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+        }
+
+        .status-pills {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 100px;
+            font-size: 0.75rem;
+            color: var(--text-gray);
+        }
+
+        .status-pill.active {
+            background: rgba(139, 92, 246, 0.15);
+            border-color: var(--classify-purple);
+            color: var(--classify-purple);
+        }
+
+        .status-pill.active::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background: var(--classify-purple);
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* Main */
+        .main {
+            position: relative;
+            z-index: 1;
+            max-width: 1700px;
+            margin: 0 auto;
+            padding: 1.5rem;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 400px 1fr 350px;
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 1400px) {
+            .dashboard { grid-template-columns: 1fr; }
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .card-body {
+            padding: 1.5rem;
+        }
+
+        /* Upload Panel */
+        .upload-area {
+            border: 2px dashed var(--border);
+            border-radius: 16px;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.3s;
+            cursor: pointer;
+            margin-bottom: 1.5rem;
+        }
+
+        .upload-area:hover, .upload-area.dragover {
+            border-color: var(--classify-purple);
+            background: rgba(139, 92, 246, 0.05);
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .upload-area h3 {
+            font-size: 1rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .upload-area p {
+            color: var(--text-dim);
+            font-size: 0.8rem;
+        }
+
+        /* Queue */
+        .queue-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .queue-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: var(--bg-input);
+            border-radius: 10px;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .queue-item:hover {
+            background: var(--bg-hover);
+        }
+
+        .queue-item.active {
+            border: 1px solid var(--classify-purple);
+            background: rgba(139, 92, 246, 0.1);
+        }
+
+        .queue-item.processing {
+            animation: processingPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes processingPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .queue-thumb {
+            width: 40px;
+            height: 40px;
+            background: var(--bg-hover);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+
+        .queue-info { flex: 1; min-width: 0; }
+
+        .queue-name {
+            font-size: 0.85rem;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .queue-size {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+        }
+
+        .queue-status {
+            font-size: 0.7rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 6px;
+            font-weight: 600;
+        }
+
+        .queue-status.pending {
+            background: rgba(113, 113, 122, 0.2);
+            color: var(--text-dim);
+        }
+
+        .queue-status.processing {
+            background: rgba(139, 92, 246, 0.2);
+            color: var(--classify-purple);
+        }
+
+        .queue-status.done {
+            background: rgba(34, 197, 94, 0.2);
+            color: var(--classify-green);
+        }
+
+        /* Classification Visualization */
+        .classification-viz {
+            min-height: 500px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .viz-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .confidence-meter {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .confidence-bar {
+            width: 150px;
+            height: 8px;
+            background: var(--bg-hover);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: var(--gradient-classify);
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        .confidence-value {
+            font-size: 0.85rem;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--classify-green);
+        }
+
+        /* Taxonomy Tree */
+        .taxonomy-tree {
+            flex: 1;
+            position: relative;
+            padding: 1rem;
+        }
+
+        .tree-level {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            position: relative;
+        }
+
+        .tree-node {
+            background: var(--bg-input);
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            padding: 0.75rem 1.25rem;
+            text-align: center;
+            transition: all 0.3s;
+            position: relative;
+            min-width: 140px;
+        }
+
+        .tree-node.active {
+            border-color: var(--classify-purple);
+            background: rgba(139, 92, 246, 0.15);
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+        }
+
+        .tree-node.dimmed {
+            opacity: 0.4;
+        }
+
+        .tree-node.highlight {
+            animation: nodeHighlight 0.5s ease;
+        }
+
+        @keyframes nodeHighlight {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .node-icon {
+            font-size: 1.5rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .node-label {
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .node-confidence {
+            font-size: 0.7rem;
+            color: var(--classify-green);
+            margin-top: 0.25rem;
+        }
+
+        .tree-connector {
+            position: absolute;
+            width: 2px;
+            background: var(--classify-purple);
+            opacity: 0.5;
+        }
+
+        /* Routing Panel */
+        .routing-panel {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .routing-header {
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .pipeline-flow {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 1rem;
+            background: var(--bg-input);
+            border-radius: 12px;
+            overflow-x: auto;
+        }
+
+        .pipeline-step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.4rem;
+            min-width: 80px;
+        }
+
+        .step-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--bg-hover);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            border: 2px solid var(--border);
+            transition: all 0.3s;
+        }
+
+        .step-icon.active {
+            border-color: var(--classify-purple);
+            background: rgba(139, 92, 246, 0.2);
+        }
+
+        .step-label {
+            font-size: 0.7rem;
+            color: var(--text-gray);
+            text-align: center;
+        }
+
+        .step-arrow {
+            font-size: 1.2rem;
+            color: var(--classify-purple);
+        }
+
+        /* Sidebar Stats */
+        .stat-cards {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .stat-card {
+            background: var(--bg-input);
+            border-radius: 12px;
+            padding: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .stat-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--bg-hover);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+        }
+
+        .stat-info { flex: 1; }
+
+        .stat-label {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            font-size: 1.3rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--classify-purple);
+        }
+
+        /* Category Distribution */
+        .category-list {
+            margin-top: 1rem;
+        }
+
+        .category-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 0;
+        }
+
+        .category-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 4px;
+        }
+
+        .category-name {
+            flex: 1;
+            font-size: 0.85rem;
+        }
+
+        .category-bar {
+            width: 80px;
+            height: 6px;
+            background: var(--bg-hover);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .category-fill {
+            height: 100%;
+            border-radius: 3px;
+        }
+
+        .category-count {
+            font-size: 0.75rem;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-dim);
+            width: 30px;
+            text-align: right;
+        }
+
+        /* MLOps Panel */
+        .mlops-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .mlops-metric {
+            background: var(--bg-input);
+            border-radius: 10px;
+            padding: 0.75rem;
+            text-align: center;
+        }
+
+        .mlops-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .mlops-label {
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 0.75rem 1rem;
+            border: none;
+            border-radius: 10px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: 'DM Sans', sans-serif;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            width: 100%;
+        }
+
+        .btn-primary {
+            background: var(--gradient-classify);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(139, 92, 246, 0.3);
+        }
+
+        .btn-secondary {
+            background: var(--bg-hover);
+            color: var(--text-gray);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-input);
+            color: var(--text-white);
+        }
+
+        .action-buttons {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 3rem 2rem;
+            color: var(--text-dim);
+        }
+
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            transform: translateX(200%);
+            transition: transform 0.3s;
+            z-index: 1000;
+        }
+
+        .toast.show {
+            transform: translateX(0);
+        }
+
+        .toast-icon { font-size: 1.3rem; }
+        .toast h4 { font-size: 0.9rem; font-weight: 600; }
+        .toast p { font-size: 0.75rem; color: var(--text-dim); }
+
+        /* Sample Buttons */
+        .sample-btns {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .sample-btn {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            color: var(--text-gray);
+            padding: 0.6rem;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'DM Sans', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+        }
+
+        .sample-btn:hover {
+            border-color: var(--classify-purple);
+            background: rgba(139, 92, 246, 0.1);
+            color: var(--text-white);
+        }
+    </style>
+</head>
+<body>
+    <div class="grid-bg"></div>
+    <div class="glow-orbs">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
+
+    <header class="header">
+        <div class="header-inner">
+            <div class="logo">
+                <div class="logo-icon">🎯</div>
+                <div class="logo-text">
+                    <h1>DocClassify-Zero</h1>
+                    <p>Zero-Shot Classification</p>
+                </div>
+            </div>
+            <div class="header-stats">
+                <div class="header-stat">
+                    <div class="header-stat-value" id="totalClassified">24,892</div>
+                    <div class="header-stat-label">Docs Classified</div>
+                </div>
+                <div class="header-stat">
+                    <div class="header-stat-value" id="classAccuracy">97.8%</div>
+                    <div class="header-stat-label">Accuracy</div>
+                </div>
+                <div class="header-stat">
+                    <div class="header-stat-value" id="categoryCount">42</div>
+                    <div class="header-stat-label">Categories</div>
+                </div>
+            </div>
+            <div class="status-pills">
+                <div class="status-pill active">Qwen3-VL Active</div>
+                <div class="status-pill">Zero-Shot Mode</div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="dashboard">
+            <!-- Left Panel - Upload & Queue -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title"><span>📥</span> Document Queue</h3>
+                    <span style="font-size: 0.75rem; color: var(--text-dim);" id="queueCount">0 pending</span>
+                </div>
+                <div class="card-body">
+                    <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+                        <span class="upload-icon">📁</span>
+                        <h3>Drop documents here</h3>
+                        <p>or click to browse</p>
+                        <input type="file" id="fileInput" hidden multiple accept=".pdf,.png,.jpg,.jpeg">
+                    </div>
+
+                    <div style="text-align: center; margin-bottom: 0.75rem;">
+                        <p style="font-size: 0.8rem; color: var(--text-dim);">Try sample documents:</p>
+                    </div>
+                    <div class="sample-btns">
+                        <button class="sample-btn" onclick="addSample('invoice')">🧾 Invoice</button>
+                        <button class="sample-btn" onclick="addSample('contract')">📋 Contract</button>
+                        <button class="sample-btn" onclick="addSample('medical')">🏥 Medical</button>
+                        <button class="sample-btn" onclick="addSample('id')">🪪 ID Card</button>
+                    </div>
+
+                    <div style="margin-top: 1.5rem;">
+                        <h4 style="font-size: 0.85rem; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <span>📋</span> Queue
+                        </h4>
+                        <div class="queue-list" id="queueList">
+                            <div class="empty-state" id="emptyQueue">
+                                <div class="empty-state-icon">📭</div>
+                                <p>No documents in queue</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="action-buttons" style="margin-top: 1rem;">
+                        <button class="btn btn-primary" onclick="processQueue()" id="processBtn" disabled>
+                            <span>▶️</span> Process All
+                        </button>
+                        <button class="btn btn-secondary" onclick="clearQueue()" id="clearBtn" disabled>
+                            <span>🗑️</span> Clear
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Center Panel - Classification Visualization -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title"><span>🔬</span> Classification Analysis</h3>
+                    <div class="confidence-meter" id="confidenceMeter" style="display: none;">
+                        <span style="font-size: 0.75rem; color: var(--text-dim);">Confidence:</span>
+                        <div class="confidence-bar">
+                            <div class="confidence-fill" id="confidenceFill" style="width: 0%"></div>
+                        </div>
+                        <span class="confidence-value" id="confidenceValue">0%</span>
+                    </div>
+                </div>
+                <div class="card-body classification-viz">
+                    <div id="vizPlaceholder">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">🎯</div>
+                            <p>Add documents to see classification hierarchy</p>
+                        </div>
+                    </div>
+
+                    <div id="taxonomyViz" style="display: none;">
+                        <div class="viz-header">
+                            <h4 style="font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem;">
+                                <span>🌳</span> Classification Hierarchy
+                            </h4>
+                            <div style="font-size: 0.75rem; color: var(--text-dim);" id="docNameDisplay">Document.pdf</div>
+                        </div>
+
+                        <div class="taxonomy-tree" id="taxonomyTree"></div>
+
+                        <div class="routing-panel">
+                            <div class="routing-header">
+                                <span>🔄</span>
+                                <span>Automatic Routing Pipeline</span>
+                            </div>
+                            <div class="pipeline-flow" id="pipelineFlow"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel - Stats & Metrics -->
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title"><span>📊</span> Session Stats</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="stat-cards">
+                            <div class="stat-card">
+                                <div class="stat-icon">📄</div>
+                                <div class="stat-info">
+                                    <div class="stat-label">Processed</div>
+                                    <div class="stat-value" id="sessionProcessed">0</div>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon">⏱️</div>
+                                <div class="stat-info">
+                                    <div class="stat-label">Avg. Time</div>
+                                    <div class="stat-value" id="avgTime">--</div>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon">✅</div>
+                                <div class="stat-info">
+                                    <div class="stat-label">High Confidence</div>
+                                    <div class="stat-value" id="highConfidence">--</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <h4 style="font-size: 0.85rem; margin: 1.25rem 0 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <span>📈</span> Category Distribution
+                        </h4>
+                        <div class="category-list" id="categoryList"></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title"><span>⚙️</span> MLOps Dashboard</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="mlops-grid">
+                            <div class="mlops-metric">
+                                <div class="mlops-value" style="color: var(--classify-green);">99.2%</div>
+                                <div class="mlops-label">Model Health</div>
+                            </div>
+                            <div class="mlops-metric">
+                                <div class="mlops-value" style="color: var(--classify-purple);">0.3%</div>
+                                <div class="mlops-label">Drift Score</div>
+                            </div>
+                            <div class="mlops-metric">
+                                <div class="mlops-value" style="color: var(--classify-blue);">v2.4.1</div>
+                                <div class="mlops-label">Model Version</div>
+                            </div>
+                            <div class="mlops-metric">
+                                <div class="mlops-value" style="color: var(--classify-teal);">42ms</div>
+                                <div class="mlops-label">Latency P95</div>
+                            </div>
+                        </div>
+
+                        <button class="btn btn-secondary" onclick="exportMetrics()">
+                            <span>📥</span> Export Metrics
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="toast" id="toast">
+        <span class="toast-icon">✅</span>
+        <div>
+            <h4 id="toastTitle">Success</h4>
+            <p id="toastMsg">Operation completed</p>
+        </div>
+    </div>
+
+    <script>
+        // Classification taxonomy data
+        const taxonomies = {
+            invoice: {
+                levels: [
+                    { label: 'Document', icon: '📄', confidence: 99.8 },
+                    { label: 'Financial', icon: '💰', confidence: 98.5 },
+                    { label: 'Invoice', icon: '🧾', confidence: 97.2 },
+                    { label: 'Supplier Invoice', icon: '🏭', confidence: 94.8 }
+                ],
+                pipeline: [
+                    { icon: '📥', label: 'Ingestion' },
+                    { icon: '🔍', label: 'OCR' },
+                    { icon: '📊', label: 'Field Extract' },
+                    { icon: '✅', label: 'Validation' },
+                    { icon: '💾', label: 'ERP Export' }
+                ],
+                category: 'Financial'
+            },
+            contract: {
+                levels: [
+                    { label: 'Document', icon: '📄', confidence: 99.9 },
+                    { label: 'Legal', icon: '⚖️', confidence: 97.8 },
+                    { label: 'Contract', icon: '📋', confidence: 96.4 },
+                    { label: 'Service Agreement', icon: '🤝', confidence: 93.2 }
+                ],
+                pipeline: [
+                    { icon: '📥', label: 'Ingestion' },
+                    { icon: '🔍', label: 'OCR' },
+                    { icon: '📝', label: 'Clause Extract' },
+                    { icon: '⚖️', label: 'Risk Analysis' },
+                    { icon: '📁', label: 'Archive' }
+                ],
+                category: 'Legal'
+            },
+            medical: {
+                levels: [
+                    { label: 'Document', icon: '📄', confidence: 99.7 },
+                    { label: 'Healthcare', icon: '🏥', confidence: 98.9 },
+                    { label: 'Clinical', icon: '🩺', confidence: 96.1 },
+                    { label: 'Prescription', icon: '💊', confidence: 94.5 }
+                ],
+                pipeline: [
+                    { icon: '📥', label: 'Ingestion' },
+                    { icon: '🔍', label: 'Medical OCR' },
+                    { icon: '💉', label: 'Drug Extract' },
+                    { icon: '🔒', label: 'HIPAA Check' },
+                    { icon: '🏥', label: 'EHR Export' }
+                ],
+                category: 'Healthcare'
+            },
+            id: {
+                levels: [
+                    { label: 'Document', icon: '📄', confidence: 99.6 },
+                    { label: 'Identity', icon: '🪪', confidence: 98.2 },
+                    { label: 'Government ID', icon: '🏛️', confidence: 95.8 },
+                    { label: 'National ID Card', icon: '🇫🇷', confidence: 92.4 }
+                ],
+                pipeline: [
+                    { icon: '📥', label: 'Ingestion' },
+                    { icon: '👤', label: 'Face Detect' },
+                    { icon: '🔍', label: 'MRZ Read' },
+                    { icon: '🛡️', label: 'Fraud Check' },
+                    { icon: '✅', label: 'KYC Verify' }
+                ],
+                category: 'Identity'
+            }
+        };
+
+        const categoryColors = {
+            'Financial': 'var(--classify-green)',
+            'Legal': 'var(--classify-indigo)',
+            'Healthcare': 'var(--classify-teal)',
+            'Identity': 'var(--classify-orange)'
+        };
+
+        let queue = [];
+        let processedCount = 0;
+        let categoryStats = {};
+
+        function init() {
+            setupDragDrop();
+            updateCategoryList();
+        }
+
+        function setupDragDrop() {
+            const area = document.getElementById('uploadArea');
+            
+            area.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                area.classList.add('dragover');
+            });
+
+            area.addEventListener('dragleave', () => {
+                area.classList.remove('dragover');
+            });
+
+            area.addEventListener('drop', (e) => {
+                e.preventDefault();
+                area.classList.remove('dragover');
+                if (e.dataTransfer.files.length) {
+                    Array.from(e.dataTransfer.files).forEach(f => addToQueue(f.name, 'uploaded'));
+                }
+            });
+
+            document.getElementById('fileInput').addEventListener('change', (e) => {
+                Array.from(e.target.files).forEach(f => addToQueue(f.name, 'uploaded'));
+            });
+        }
+
+        function addSample(type) {
+            const names = {
+                invoice: 'invoice_supplier_2024.pdf',
+                contract: 'service_agreement_v2.pdf',
+                medical: 'ordonnance_janvier.pdf',
+                id: 'carte_nationale_scan.jpg'
+            };
+            addToQueue(names[type], type);
+        }
+
+        function addToQueue(name, type) {
+            const id = Date.now() + Math.random();
+            queue.push({ id, name, type, status: 'pending' });
+            renderQueue();
+            updateButtons();
+            showToast('Added', `${name} added to queue`);
+        }
+
+        function renderQueue() {
+            const list = document.getElementById('queueList');
+            const empty = document.getElementById('emptyQueue');
+            
+            if (queue.length === 0) {
+                list.innerHTML = '';
+                list.appendChild(empty);
+                empty.style.display = 'block';
+            } else {
+                empty.style.display = 'none';
+                list.innerHTML = queue.map(item => `
+                    <div class="queue-item ${item.status}" onclick="selectItem('${item.id}')">
+                        <div class="queue-thumb">${getIcon(item.type)}</div>
+                        <div class="queue-info">
+                            <div class="queue-name">${item.name}</div>
+                            <div class="queue-size">${(Math.random() * 2 + 0.5).toFixed(1)} MB</div>
+                        </div>
+                        <span class="queue-status ${item.status}">${item.status.toUpperCase()}</span>
+                    </div>
+                `).join('');
+            }
+
+            document.getElementById('queueCount').textContent = `${queue.filter(i => i.status === 'pending').length} pending`;
+        }
+
+        function getIcon(type) {
+            const icons = { invoice: '🧾', contract: '📋', medical: '🏥', id: '🪪', uploaded: '📄' };
+            return icons[type] || '📄';
+        }
+
+        function updateButtons() {
+            document.getElementById('processBtn').disabled = queue.length === 0;
+            document.getElementById('clearBtn').disabled = queue.length === 0;
+        }
+
+        function selectItem(id) {
+            const item = queue.find(i => i.id == id);
+            if (item && item.status === 'done') {
+                showClassification(item.type);
+            }
+        }
+
+        async function processQueue() {
+            document.getElementById('processBtn').disabled = true;
+            
+            for (let i = 0; i < queue.length; i++) {
+                if (queue[i].status === 'pending') {
+                    queue[i].status = 'processing';
+                    renderQueue();
+                    
+                    await new Promise(r => setTimeout(r, 1500));
+                    
+                    queue[i].status = 'done';
+                    processedCount++;
+                    
+                    // Update category stats
+                    const tax = taxonomies[queue[i].type] || taxonomies.invoice;
+                    categoryStats[tax.category] = (categoryStats[tax.category] || 0) + 1;
+                    
+                    renderQueue();
+                    updateStats();
+                    showClassification(queue[i].type);
+                }
+            }
+
+            showToast('Complete', 'All documents processed');
+            document.getElementById('processBtn').disabled = false;
+        }
+
+        function showClassification(type) {
+            const tax = taxonomies[type] || taxonomies.invoice;
+            
+            document.getElementById('vizPlaceholder').style.display = 'none';
+            document.getElementById('taxonomyViz').style.display = 'block';
+            document.getElementById('confidenceMeter').style.display = 'flex';
+
+            // Update confidence
+            const finalConf = tax.levels[tax.levels.length - 1].confidence;
+            document.getElementById('confidenceFill').style.width = `${finalConf}%`;
+            document.getElementById('confidenceValue').textContent = `${finalConf}%`;
+
+            // Render taxonomy tree
+            const tree = document.getElementById('taxonomyTree');
+            tree.innerHTML = tax.levels.map((level, i) => `
+                <div class="tree-level">
+                    <div class="tree-node active highlight" style="animation-delay: ${i * 0.15}s">
+                        <div class="node-icon">${level.icon}</div>
+                        <div class="node-label">${level.label}</div>
+                        <div class="node-confidence">${level.confidence}%</div>
+                    </div>
+                </div>
+            `).join('');
+
+            // Render pipeline
+            const pipeline = document.getElementById('pipelineFlow');
+            pipeline.innerHTML = tax.pipeline.map((step, i) => `
+                ${i > 0 ? '<span class="step-arrow">→</span>' : ''}
+                <div class="pipeline-step">
+                    <div class="step-icon active">${step.icon}</div>
+                    <div class="step-label">${step.label}</div>
+                </div>
+            `).join('');
+        }
+
+        function updateStats() {
+            document.getElementById('sessionProcessed').textContent = processedCount;
+            document.getElementById('avgTime').textContent = (Math.random() * 0.5 + 0.3).toFixed(2) + 's';
+            document.getElementById('highConfidence').textContent = Math.round(processedCount * 0.94);
+            updateCategoryList();
+        }
+
+        function updateCategoryList() {
+            const list = document.getElementById('categoryList');
+            const categories = ['Financial', 'Legal', 'Healthcare', 'Identity'];
+            const total = Object.values(categoryStats).reduce((a, b) => a + b, 0) || 1;
+
+            list.innerHTML = categories.map(cat => {
+                const count = categoryStats[cat] || 0;
+                const pct = (count / total * 100).toFixed(0);
+                return `
+                    <div class="category-item">
+                        <div class="category-color" style="background: ${categoryColors[cat]}"></div>
+                        <div class="category-name">${cat}</div>
+                        <div class="category-bar">
+                            <div class="category-fill" style="width: ${pct}%; background: ${categoryColors[cat]}"></div>
+                        </div>
+                        <div class="category-count">${count}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function clearQueue() {
+            queue = [];
+            renderQueue();
+            updateButtons();
+            document.getElementById('vizPlaceholder').style.display = 'block';
+            document.getElementById('taxonomyViz').style.display = 'none';
+            document.getElementById('confidenceMeter').style.display = 'none';
+            showToast('Cleared', 'Queue cleared');
+        }
+
+        function exportMetrics() {
+            showToast('Exporting', 'MLOps metrics exported to CSV');
+        }
+
+        function showToast(title, msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastTitle').textContent = title;
+            document.getElementById('toastMsg').textContent = msg;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        init();
+    </script>
+</body>
+</html>
